@@ -1,7 +1,9 @@
 import re
 import socket
+import threading
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QScrollArea, QListWidget, QListWidgetItem, QSpacerItem, QSizePolicy
 from PyQt5.QtCore import Qt
+
 
 def clean_message(response):
     response = re.sub(r'^\[\{"generated_text":\s*"', '', response)
@@ -16,6 +18,7 @@ class ChatClient(QWidget):
         self.client_socket = client_socket
         self.login_window = login_window
         self.initUI()
+        self.start_receiving()  # Start the thread to receive messages
 
     def initUI(self):
         self.setWindowTitle("Chat Client")
@@ -28,6 +31,7 @@ class ChatClient(QWidget):
         self.side_menu = QListWidget()
         self.side_menu.setFixedWidth(200)  # Set width of the side menu
         self.side_menu.addItem(QListWidgetItem("Return to Login"))
+        self.side_menu.addItem(QListWidgetItem("New Group Chat"))
         self.side_menu.itemClicked.connect(self.on_menu_item_clicked)
         main_layout.addWidget(self.side_menu)
 
@@ -123,15 +127,25 @@ class ChatClient(QWidget):
     def send_prompt(self, prompt):
         try:
             self.client_socket.sendall(prompt.encode())
-            self.client_socket.settimeout(20)  # Timeout duration in seconds
+        except Exception as e:
+            self.add_message(f"An error occurred: {e}", "system")
+
+    def receive_messages(self):
+        while True:
             try:
                 response = self.client_socket.recv(9999).decode()
-                response = clean_message(response)
-                return response
-            except socket.timeout:
-                return "No response from server within the timeout period."
-        except Exception as e:
-            return f"An error occurred: {e}"
+                if response:
+                    response = clean_message(response)
+                    self.add_message(response, "bot")
+                else:
+                    break  # Connection closed
+            except Exception as e:
+                self.add_message(f"An error occurred: {e}", "system")
+                break
+
+    def start_receiving(self):
+        self.receive_thread = threading.Thread(target=self.receive_messages, daemon=True)
+        self.receive_thread.start()
 
     def on_send(self):
         prompt = self.prompt_entry.text().replace('\\n', '\n')
@@ -141,12 +155,12 @@ class ChatClient(QWidget):
                 self.client_socket.close()
                 self.close()
                 return
-            response = self.send_prompt(prompt)
-            self.add_message(response, "bot")
+            self.send_prompt(prompt)
             self.prompt_entry.clear()
 
     def on_menu_item_clicked(self, item):
         if item.text() == "Return to Login":
-            self.client_socket.close()  # Close the socket connection
-            self.login_window.show()  # Show the login window again
-            self.close()  # Close the chat window
+            message = "$home$"
+            self.client_socket.sendall(message.encode())
+            self.login_window.show()  
+            self.close()  

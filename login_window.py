@@ -1,7 +1,7 @@
 import re
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 from server_connection import BUFFER_SIZE, ServerConnection
-from chat_client import ChatClient
+from room_window import RoomWindow
 
 class LoginWindow(QWidget):
     def __init__(self):
@@ -25,6 +25,8 @@ class LoginWindow(QWidget):
 
         self.password_label = QLabel("Password:")
         layout.addWidget(self.password_label)
+
+        # Initialize password_entry before setting EchoMode
         self.password_entry = QLineEdit()
         self.password_entry.setEchoMode(QLineEdit.Password)
         layout.addWidget(self.password_entry)
@@ -72,6 +74,7 @@ class LoginWindow(QWidget):
         self.setLayout(layout)
         print("Login UI Initialized")
 
+
     def on_connected(self):
         self.add_message("Connected to server")
 
@@ -108,7 +111,7 @@ class LoginWindow(QWidget):
         password = self.password_entry.text().strip()
         if username == "1" and password == "1":
             print("Bypassing server login for username and password '1'")
-            self.open_chat_window()  # Directly open the chat window
+            self.open_room_window()  # Directly open the room window
         elif username and password:
             self.send_credentials("login", username, password)
 
@@ -122,20 +125,24 @@ class LoginWindow(QWidget):
             self.send_credentials("signup", username, password)
 
     def send_credentials(self, action, username, password):
-        try:
-            credentials = f"{action}:{username}:{password}"
-            self.server_thread.client_socket.sendall(credentials.encode())
-            response = self.server_thread.client_socket.recv(1).decode()
-            if response == '1':
-                self.open_chat_window()
-            elif response == '0':
-                self.add_message("Login failed. Please try again.")
-            else:
-                self.add_message("Unexpected response from the server.")
-        except Exception as e:
-            self.add_message(f"An error occurred: {e}")
+            try:
+                credentials = f"{action}:{username}:{password}"
+                self.server_thread.client_socket.sendall(credentials.encode())
+                response = self.server_thread.client_socket.recv(1).decode()
+                if response == '1':
+                    self.open_room_window()
+                elif response == '0':
+                    self.add_message("Login failed. Please try again.")
+                    self.show_error_message("Login ERROR","password or username is not correct")
+                elif response == '2':
+                    self.add_message("Sign up failed. Please try again.")
+                    self.show_error_message("Sign Up ERROR", "this username is already exists")
+                else:
+                    self.add_message("Unexpected response from the server.")
+            except Exception as e:
+                self.add_message(f"An error occurred: {e}")
 
-    def open_chat_window(self):
+    def open_room_window(self):
         self.hide()
-        self.chat_client = ChatClient(self.server_thread.client_socket, self)
-        self.chat_client.show()
+        self.room_window = RoomWindow(self.server_thread.client_socket, self)
+        self.room_window.show()
